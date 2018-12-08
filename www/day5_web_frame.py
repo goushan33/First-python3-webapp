@@ -47,7 +47,7 @@ def Handler_decorator(path,*,method):#method是命名关键字参数，传值的
         @functools.wraps(func)#更正函数签名：直接将func的__name__属性复制一份到wraps里面
         def wrapper(*args,**kw):
             return func(*args,**kw)
-        wrapper.__route__ = path #存储路径信息,注意这里属性名叫route
+        wrapper.__route__ = path #存储路径信息,注意这里属性名叫route!太坑了！！！
         wrapper.__method__ = method #存储方法信息
         return wrapper
     return decorator
@@ -176,15 +176,15 @@ class RequestHandler(object):
 
 def add_route(app,fn):#编写一个add_route函数，用来注册一个URL处理函数
     method=getattr(fn,'__method__',None)
-    path=getattr(fn,'__path__',None)
+    path=getattr(fn,'__route__',None)
     if path is None or method is None:
         raise ValueError('@get or @post not defined in %s.' % str(fn))
     if not asyncio.iscoroutinefunction(fn) and not inspect.isgeneratorfunction(fn):
         #如果fn不是一个协程或者也不是一个被协程装饰的函数
         fn = asyncio.coroutine(fn)#将fn变成协程
-    logging.info(
-        'add route %s %s => %s(%s)' % (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
+    logging.info('add route %s %s => %s(%s)' % (method, path, fn.__name__, ', '.join(inspect.signature(fn).parameters.keys())))
     app.router.add_route(method, path, RequestHandler(app, fn))
+    logging.info('add route successfully')
 
 
 #直接导入文件，批量注册一个URL处理函数
@@ -201,25 +201,25 @@ def add_routes(app,module_name):#module_name应该是存放一系列url处理函
         #[name]:相当于fromlist = ('name',)，也可以写成[name].
         s=__import__(module_name[:n], globals(), locals(),[name],0)
         mod = getattr(s, name)
-
     for attr in dir(mod):
         if attr.startswith('_'):#把导入的模块里面本身的属性；例如__builtins__\__cached__\__doc__等过滤掉
             continue
-        fn=attr
-        if callable(fn):#callable,Python自带的判断对象是否可调用，返回True\False
+        fn = getattr(mod, attr)
+        if callable(fn):
             method = getattr(fn, '__method__', None)
-            path=getattr(fn,'__path__',None)
-            if method and path:#我觉得这儿有问题。这儿预先判断method和path是否存在，才进入add_route函数，如果不存在，那这儿怎么继续下去呢？也不报错？
-                add_route(app,fn)
+            path = getattr(fn, '__route__', None)
+            if path and method:  # 这里要查询path以及method是否存在而不是等待add_route函数查询，因为那里错误就要报错了
+                logging.info('path and method true')
+                add_route(app, fn)
 
 
-def add_static_resource(app):
+def add_static(app):
     #os.path.abspath(__file__)获得当前文件所在路径/目录:D:\PycharmProjects\test_anaconda.py\Dec\test_useless.py
     #os.path.dirname(os.path.abspath(__file__))获得当前文件目录的父目录/上一级目录:D:\PycharmProjects\test_anaconda.py\Dec
     ##输出当前文件夹中'static'的路径:D:\PycharmProjects\test_anaconda.py\Dec\static
 
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),'static')
-    app.router.add_static('/static/',path)#prefix (str) – URL path prefix for handled static files
+    app.router.add_static('/static/',path)
     #app.router.add_static必须的两个参数：prefix,path
     #prefix：是静态文件的url的前缀，以/开始，在浏览器地址栏上显示在网站host之后，也用于index.html静态页面进行引用
     #path：静态文件目录的路径，可以是相对路径，上面代码使用的static/css就是相对路径——相对于proxy_server.py所在路径。
