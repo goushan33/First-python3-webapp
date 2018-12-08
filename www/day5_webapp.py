@@ -7,7 +7,7 @@ from aiohttp import web
 from jinja2 import Environment,FileSystemLoader
 
 import day3_orm
-from day5_web_frame import add_route,add_static_resource
+from day5_web_frame import add_routes,add_static
 
 
 
@@ -34,7 +34,8 @@ def init_jinja2(app,**kw):#eg:kw:filters=dict(datetime=datetime_filter),path=r"E
     path = kw.get('path', None)
     if path is None:
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-    logging.info('set jinja2 template path: %s' % path)
+        logging.info('set jinja2 template path: %s' % path)
+    logging.info('传递path')
     env = Environment(loader=FileSystemLoader(path), **options)#jinja2-Environment-FileSystemLoader：文件系统加载器
     filters = kw.get('filters', None)
     if filters is not None:#filters=dict(datetime=datetime_filter)
@@ -42,19 +43,6 @@ def init_jinja2(app,**kw):#eg:kw:filters=dict(datetime=datetime_filter),path=r"E
             env.filters[name] = f#env.filters[datetime]=datetimme_filter
     app['__templating__'] = env
 
-
-def datetime_filter(t):
-    delta = int(time.time() - t)
-    if delta < 60:
-        return u'1分钟前'
-    if delta < 3600:
-        return u'%s分钟前' % (delta // 60)
-    if delta < 86400:
-        return u'%s小时前' % (delta // 3600)
-    if delta < 604800:
-        return u'%s天前' % (delta // 86400)
-    dt = datetime.fromtimestamp(t)
-    return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
 
 
 
@@ -91,13 +79,12 @@ async def response_factory(app,handler):
             if r.startswith('redirect:'):  # 重定向
                 return web.HTTPFound(r[9:])  # 转入别的网站
             resp = web.Response(body=r.encode('utf-8'))
-            resp.content_type = 'text/html;charsest=utf-8'
+            resp.content_type = 'text/html;charset=utf-8'
             return resp
         if isinstance(r,dict):
             template = r.get('__template__')
             if template is None:  # 序列化JSON那章，传递数据
-                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode(
-                    'utf-8'))  # https://docs.python.org/2/library/json.html#basic-usage
+                resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))  # https://docs.python.org/2/library/json.html#basic-usage
                 return resp
             else:  # jinja2模板
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
@@ -114,3 +101,34 @@ async def response_factory(app,handler):
         resp.content_type = 'text/plain;charset=utf-8'
         return resp
     return response_middleware
+
+
+def datetime_filter(t):
+    delta = int(time.time() - t)
+    if delta < 60:
+        return u'1分钟前'
+    if delta < 3600:
+        return u'%s分钟前' % (delta // 60)
+    if delta < 86400:
+        return u'%s小时前' % (delta // 3600)
+    if delta < 604800:
+        return u'%s天前' % (delta // 86400)
+    dt = datetime.fromtimestamp(t)
+    return u'%s年%s月%s日' % (dt.year, dt.month, dt.day)
+
+
+
+async def init(loop):
+    await day3_orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www-data', password='www-data', db='awesome')
+    app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
+    init_jinja2(app,filters=dict(datetime=datetime_filter),path=dict(path=r"D:\PycharmProjects\First-python3-webapp\www\template"))
+    add_routes(app,'day5_test_url_handlers')
+    #add_static(app)
+    srv=await loop.create_server(app.make_handler(),'127.0.0.1',9002)
+    logging.info('Server started at http://127.0.0.1:9000...')
+    return srv
+
+
+loop=asyncio.get_event_loop()
+loop.run_until_complete(init(loop))
+loop.run_forever()
