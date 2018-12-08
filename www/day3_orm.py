@@ -48,23 +48,18 @@ def destory_pool():
 
 
 # select函数执行SELECT语句
-@asyncio.coroutine
-def select(sql, args, size=None):
-    log(sql,args)
+async def select(sql, args, size=None):
+    log(sql, args)
     global __pool
-    # 有了连接池，现在应该是为某个连接建立游标
-    # 1、这儿用yield from 调用子协程，并直接返回调用结果
-    # 2、yield from 从连接池中返回一个连接（前提是已经建立了连接池）
-    with (yield from __pool)as conn:  # 3、用with 语句确保会关闭连接
-        curs = yield from conn.cursor(aiomysql.DictCursor)  # A cursor which returns results as a dictionary.
-        yield from curs.execute(sql.replace('?', '%s'), args or ())
-        if size:
-            rs = yield from curs.fetchmany(size)  # 一次性返回size条查询结果，结果是个list，元素为tuple。因为是select，所以不用提交事务
-        else:
-            rs = yield from curs.fetchall()  # 一次性返回所以的查询结果
-        yield from curs.close()  # 关闭游标，不用手动关闭connection，因为connection在with语句里
-        logging.info('%s rows has been returned' % len(rs))
-    return rs  # 返回查询结果，元素为tuple的list
+    async with __pool.get() as conn:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(sql.replace('?', '%s'), args or ())
+            if size:
+                rs = await cur.fetchmany(size)
+            else:
+                rs = await cur.fetchall()
+        logging.info('rows returned: %s' % len(rs))
+        return rs
 
 
 # 封装insert\update\delete三个语句
@@ -211,7 +206,8 @@ class Model(dict, metaclass=ModelMetaclass):
         self[key] = value
 
     def getValue(self, key):
-        return getattr(self, key, None)  # getattr()是内置函数。返回self这个对象的key属性对应值，如果没有这个，就返回默认值None.
+        return getattr(self, key, None)
+        # getattr()是内置函数。返回self这个对象的key属性对应值，如果没有这个，就返回默认值None.
 
     def getValueOrDefault(self, key):
         value = getattr(self, key, None)
@@ -223,7 +219,8 @@ class Model(dict, metaclass=ModelMetaclass):
                 setattr(self, key, value)
         return value
 
-    # 类方法有类变量cls传入，从而可以用cls做一些相关的处理。并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类
+    # 类方法有类变量cls传入，从而可以用cls做一些相关的处理。
+    # 并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类
     @classmethod
     @asyncio.coroutine
     def find_all(cls, where=None, args=None, **kw):
@@ -269,7 +266,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     #attrs['__select__'] = 'select `%s`, %s from `%s` ' % (primaryKey, ', '.join(escaped_fields), table_name)
-    # 这儿的cls有点儿类似实例方法的cls，不需要显示传值，值当前类对象本身。
+    # 这儿的cls有点儿类似实例方法的self，不需要显示传值，值当前类对象本身。
     #由类自身调用。根据primary_key查找，因为primary_key的唯一性，所以只返回一行记录。
     def find(cls, primarykey):
         '''find object by primary key'''
@@ -283,7 +280,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     # # __select__:'select `%s`, %s from `%s` ' % (primaryKey, ', '.join(escaped_fields), table_name)
-    #这儿的cls有点儿类似实例方法的cls，不需要显示传值，值当前类对象本身。
+    #这儿的cls有点儿类似实例方法的self，不需要显示传值，值当前类对象本身。
     # 根据WHERE条件查找；name="xxx",email="xxx"。返回的是对应的一行或多行行记录
     def findAll(cls, **kw):
         rs = []
@@ -301,7 +298,8 @@ class Model(dict, metaclass=ModelMetaclass):
 
     # attrs['__delete__'] = 'delete from `%s` where `%s`=?' % (table_name, primaryKey
     @asyncio.coroutine
-    def save(self):#实例方法，先新建一个实例eg：User1=User(……),然后用该实例调用save()，实际上，就是调用execute()执行力insert操作
+    def save(self):
+        #实例方法，先新建一个实例eg：User1=User(……),然后用该实例调用save()，实际上，就是调用execute()执行力insert操作
         args = list(map(self.getValueOrDefault, self.__fields__))
         #print('save:%s' % args)
         args.append(self.getValueOrDefault(self.__primary_key__))
