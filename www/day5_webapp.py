@@ -61,6 +61,7 @@ middleware的用处就在于把通用的功能从每个URL处理函数中拿出�
 async def logger_factory(app,handler):
     async def logger_middleware(request):
         logging.info('Request:%s%s'%(request.method,request.path))
+        logging.info('Request:%s' % request)
         return await handler(request)
     return logger_middleware
 
@@ -121,11 +122,11 @@ def datetime_filter(t):
 async def init(loop):
     await day3_orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www-data', password='www-data', db='awesome')
     app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
-    init_jinja2(app,filters=dict(datetime=datetime_filter),path=dict(path=r"D:\PycharmProjects\First-python3-webapp\www\template"))
-    add_routes(app,'day5_test_url_handlers')
-    #add_static(app)
-    srv=await loop.create_server(app.make_handler(),'127.0.0.1',9002)
-    logging.info('Server started at http://127.0.0.1:9000...')
+    init_jinja2(app,filters=dict(datetime=datetime_filter),path=r"D:\PycharmProjects\First-python3-webapp\www\templates")#初始化jinja2模板，也就是提供模板路径。将文件加载器值赋给app['__templating__'] = env。
+    add_routes(app,'day7_handlers')
+    add_static(app)
+    srv=await loop.create_server(app.make_handler(),'127.0.0.1',9005)
+    logging.info('Server started at http://127.0.0.1:9005...')
     return srv
 
 
