@@ -36,7 +36,7 @@ def toDict(d):
         D[k] = toDict(v) if isinstance(v, dict) else v
     return D
 
-configs = day6_config_default.configs
+configs = day6_config_default.configs#a dict
 
 try:
     import config_override
@@ -45,3 +45,4 @@ except ImportError:
     pass
 
 configs = toDict(configs)
+#print(configs.session.secret)

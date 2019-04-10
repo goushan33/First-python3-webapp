@@ -8,6 +8,7 @@ from jinja2 import Environment,FileSystemLoader
 
 import day3_orm
 from day5_web_frame import add_routes,add_static
+from day7_handlers import cookiestr2user,COOKIE_NAME
 
 
 
@@ -65,6 +66,27 @@ async def logger_factory(app,handler):
         return await handler(request)
     return logger_middleware
 
+
+
+#编写绑定cookie内容到request里的middleware factory
+#解析cookie,cookie内容放入request里
+async def auth_factory(app, handler):
+    async def auth(request):
+        logging.info('check user: %s %s' % (request.method, request.path))
+        request.__user__ = None
+        cookie_str = request.cookies.get(COOKIE_NAME)
+        if cookie_str:
+            user =await cookiestr2user(cookie_str)
+            if user:
+                logging.info('set current user: %s' % user.email)
+                request.__user__ = user
+        if request.path.startswith('/manage/') and (request.__user__ is None or not request.__user__.admin):
+            return web.HTTPFound('/signin')
+        return (await handler(request))
+    return auth
+
+
+
 #编写返回response对象的middleware factory
 async def response_factory(app,handler):
     async def response_middleware(request):
@@ -88,6 +110,7 @@ async def response_factory(app,handler):
                 resp = web.Response(body=json.dumps(r, ensure_ascii=False, default=lambda o: o.__dict__).encode('utf-8'))  # https://docs.python.org/2/library/json.html#basic-usage
                 return resp
             else:  # jinja2模板
+                r['__user__'] = request.__user__
                 resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
                 resp.content_type = 'text/html;charset=utf-8'
                 return resp
@@ -102,6 +125,8 @@ async def response_factory(app,handler):
         resp.content_type = 'text/plain;charset=utf-8'
         return resp
     return response_middleware
+
+
 
 
 def datetime_filter(t):
@@ -121,7 +146,7 @@ def datetime_filter(t):
 
 async def init(loop):
     await day3_orm.create_pool(loop=loop, host='127.0.0.1', port=3306, user='www-data', password='www-data', db='awesome')
-    app=web.Application(loop=loop,middlewares=[logger_factory,response_factory])
+    app=web.Application(loop=loop,middlewares=[logger_factory,auth_factory,response_factory])
     init_jinja2(app,filters=dict(datetime=datetime_filter),path=r"D:\PycharmProjects\First-python3-webapp\www\templates")#初始化jinja2模板，也就是提供模板路径。将文件加载器值赋给app['__templating__'] = env。
     add_routes(app,'day7_handlers')
     add_static(app)

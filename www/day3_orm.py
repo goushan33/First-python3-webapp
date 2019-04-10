@@ -3,9 +3,7 @@ import asyncio, time, os, json
 
 # 为什么使用aiomysql?一次使用异步 处处使用异步
 import aiomysql
-import logging;
-
-logging.basicConfig(level=logging.INFO)
+import logging;logging.basicConfig(level=logging.INFO)
 
 
 # logging级别有：debug\info\warning\error\critical,level从10到50.
@@ -128,7 +126,7 @@ class BooleanField(Field):
         super().__init__(name, 'boolean', False, default)
 
 
-# 定义USER类来操作/对应数据表USER
+# 定义USER类来操作/对应数据表USERS
 
 
 # 接下来定义Model类，先定义它的元类ModelMetaclass.
@@ -221,6 +219,7 @@ class Model(dict, metaclass=ModelMetaclass):
 
     # 类方法有类变量cls传入，从而可以用cls做一些相关的处理。
     # 并且有子类继承时，调用该类方法时，传入的类变量cls是子类，而非父类
+    #更高级的查找，考虑oderBy以及limit
     @classmethod
     @asyncio.coroutine
     def find_all(cls, where=None, args=None, **kw):
@@ -280,7 +279,7 @@ class Model(dict, metaclass=ModelMetaclass):
     @classmethod
     @asyncio.coroutine
     # # __select__:'select `%s`, %s from `%s` ' % (primaryKey, ', '.join(escaped_fields), table_name)
-    #这儿的cls有点儿类似实例方法的self，不需要显示传值，值当前类对象本身。
+    #这儿的cls有点儿类似实例方法的self，不需要显示传值，指当前类对象本身。
     # 根据WHERE条件查找；name="xxx",email="xxx"。返回的是对应的一行或多行行记录
     def findAll(cls, **kw):
         rs = []
@@ -314,7 +313,7 @@ class Model(dict, metaclass=ModelMetaclass):
     #终于搞懂update()怎么工作了。实例方法，由实例调用；
     #新建一个实例User_new=User(name="new_name"……id="old_id")：其实这儿要把表中的7个字段都写进来。
     # 就算你只想改变其中一个字段，另外6个都需要传旧值进来；
-    #这样其实没法再实际中应用。这儿还需要琢磨。
+    #这样其实没法再实际中应用。这儿还需要优化。
     # attrs['__update__'] = 'update `%s` set %s where `%s` = ?' % (table_name, ', '.join(map(lambda f: '`%s`=?' % (mappings.get(f).name or f), fields)), primaryKey)
     @asyncio.coroutine
     def update(self):  # 修改数据库中已经存入的数据
